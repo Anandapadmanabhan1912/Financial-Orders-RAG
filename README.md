@@ -1,154 +1,135 @@
 # ORDERWISE — Kerala Finance Government Order Knowledge Assistant
 
-ORDERWISE is a version-aware Hybrid RAG assistant designed for government finance officials. It processes Kerala Finance Government Orders (GOs), extracts metadata and tables, traces amendment/supersession relationships across document versions, answers natural-language and exact GO queries with strict grounding, and displays exact PDF source evidence and page previews.
+---
+
+## 1. Usecase Name
+**ORDERWISE — Kerala Finance Government Order Knowledge Assistant**
+
+### System Architecture Diagram
+
+![System Architecture](sys_architecture.png)
 
 ---
 
-## Key Features
-
-1. **Version-Aware DAG Relationship Engine**:
-   - Detects references between government orders (`G.O.(Rt)No.5618/2026/FIN`, `G.O.(Ms)No.106/2026/FIN`, `G.O.(Ms)No.23/2022/FIN`).
-   - Automatically builds a Directed Acyclic Graph (DAG) of document references.
-   - Computes dynamic order statuses: `CURRENT`, `SUPERSEDED`, `AMENDED`, `HISTORICAL`, or `UNRESOLVED`.
-
-2. **As-Of-Date Historical Validity Resolver**:
-   - Resolves active rules as of any historical target date (e.g. querying KFC financial assistance limit as of `2023-01-01` vs `2026-08-01`).
-   - Explains why newer orders issued after the target date were excluded.
-
-3. **Hybrid Retrieval Pipeline**:
-   - Dual-channel retrieval using SQLite FTS5 (BM25 keyword matching giving massive boost to exact GO identifiers) and dense vector embeddings (`sentence-transformers` / `all-MiniLM-L6-v2` / Gemini embeddings).
-   - Reciprocal Rank Fusion (RRF) for candidate ranking and deduplication.
-
-4. **Exact Metadata & Table Extraction**:
-   - Page-by-page layout text extraction using PyMuPDF (`fitz`).
-   - Structured table extraction preserving numerical row/column alignment using `pdfplumber`.
-   - Automatic regex extraction of GO numbers, departments, issue dates, and financial parameters (budget allocations, monetary limits like `Rs. 100 Crore`, interest rates, schedule dates).
-
-5. **Grounded RAG Assistant**:
-   - Integrates with the official `google-genai` SDK using `gemini-3.6-flash` (`client.interactions.create`).
-   - Supports Hugging Face Inference API via `openai` client compatible router (`https://router.huggingface.co/v1`).
-   - Includes a structured offline failsafe generator when API keys are unconfigured.
-
-6. **Interactive UI & Source Inspection Drawer**:
-   - Modern Vanilla HTML5/CSS3/JS single-page web app.
-   - Grounded RAG Chat console with As-Of-Date datepicker, tool execution trace dropdown, and formatted Markdown rendering via Marked.js.
-   - Document repository list with status badges (`CURRENT`, `SUPERSEDED`, `AMENDED`), financial parameters cards, and version DAG history.
-   - Drag-and-drop PDF ingestion dropzone.
-   - Side drawer displaying exact PDF page preview PNG snapshots.
+## 2. What the Agent Does
+ORDERWISE is a version-aware Hybrid RAG knowledge assistant designed for government finance officials. When a user asks a question or searches an exact Government Order (GO) number (e.g., `G.O.(Rt)No.5618/2026/FIN`, `G.O.(Ms)No.106/2026/FIN`), the agent:
+1. **Identifies Authoritative Orders**: Traces supersession and amendment relationship chains across document versions.
+2. **Evaluates Historical Validity**: Resolves rules as of any requested target date (As-Of-Date logic).
+3. **Extracts Exact Table Semantics & Metadata**: Preserves financial parameters (budget allocations, monetary limits, interest rates, schedule dates).
+4. **Generates Grounded Answers**: Delivers structured, synthesized responses citing exact source documents and page numbers.
+5. **Provides Verifiable Proof**: Renders side-by-side original PDF page snapshots for visual verification.
 
 ---
 
-## Technology Stack
+## 3. Key Features
 
-- **Backend**: Python 3.9+, FastAPI, Uvicorn
-- **Database & Search**: SQLite with FTS5 virtual table + JSON metadata storage
-- **Vector Embeddings**: `sentence-transformers` (`all-MiniLM-L6-v2`) / FAISS / Gemini Embeddings
-- **PDF Processing**: `PyMuPDF` (`fitz`), `pdfplumber`, `reportlab` (for seed PDF generation)
-- **AI / LLM Integrations**:
-  - `google-genai` SDK (`gemini-3.6-flash`)
-  - `openai` SDK (`router.huggingface.co/v1`)
-- **Frontend**: Vanilla HTML5, CSS3, JavaScript ES6, `Marked.js` (for client-side Markdown rendering)
+- **Version-Aware DAG Relationship Engine**:
+  - Automatically parses document reference sections ("Read 1...", "in continuation to", "modified", "superseded").
+  - Dynamically computes document statuses: `CURRENT`, `SUPERSEDED`, `AMENDED`, `HISTORICAL`, or `UNRESOLVED`.
+
+- **As-Of-Date Historical Validity Resolver**:
+  - Evaluates active rules as of any historical date requested by the official (e.g. KFC assistance limit on `2023-01-01` vs `2026-08-01`).
+  - Automatically excludes orders issued after the target date and explains the version timeline.
+
+- **Hybrid Retrieval Pipeline (BM25 + Dense Vector + RRF)**:
+  - SQLite FTS5 Full-Text Search for high-precision exact GO number matching.
+  - Dense Vector Search (`sentence-transformers` / `all-MiniLM-L6-v2`) for semantic concept queries.
+  - Reciprocal Rank Fusion (RRF) for merging and deduplicating candidates.
+
+- **Exact Table & Metadata Ingestion**:
+  - PyMuPDF (`fitz`) layout text parsing + `pdfplumber` table extraction preserving row/column alignment.
+  - Regex extraction for GO numbers, department names, issue dates, monetary amounts (`Rs. 100 Crore`), and schedule dates.
+
+- **Grounded LLM Generation**:
+  - Integrates with the official `google-genai` SDK using `gemini-3.6-flash` (`client.interactions.create`).
+  - Supports Hugging Face Inference API via `openai` client compatible router (`https://router.huggingface.co/v1`).
+  - Includes a structured offline failsafe generator when API keys are unconfigured.
+
+- **Interactive UI & Source Verification Drawer**:
+  - Single-page web interface with As-Of-Date datepicker, tool execution trace logs, and client-side Markdown rendering (Marked.js).
+  - Document repository displaying extracted parameters cards and DAG version timeline graphs.
+  - Side drawer displaying exact PDF page preview PNG snapshots.
 
 ---
 
-## Directory Structure
+## 4. How to Run It
 
-```
-orderwise/
-├── backend/
-│   ├── app/
-│   │   ├── main.py                  # FastAPI REST server & static hosting
-│   │   ├── config.py                # Environment configuration loader
-│   │   ├── db.py                    # SQLite database schema, FTS5 & CRUD
-│   │   ├── ingestor.py              # PDF text, table & chunking ingestion pipeline
-│   │   ├── metadata_extractor.py    # GO regex, dates, departments & reference parser
-│   │   ├── version_engine.py        # Reference DAG graph & As-Of-Date resolver
-│   │   ├── hybrid_retriever.py      # BM25 FTS + Vector Search + RRF fusion
-│   │   ├── llm_service.py           # Grounded RAG response generator
-│   │   └── pdf_utils.py             # PDF page PNG preview renderer
-│   └── seed_data/
-│       └── generate_seed_gos.py     # Sample Kerala Finance GO PDF generator
-├── frontend/
-│   ├── index.html                   # Main single-page web application UI
-│   ├── css/
-│   │   └── style.css                # Custom CSS styling system
-│   └── js/
-│       ├── app.js                   # Application manager, upload dropzone & repository
-│       └── chat.js                  # Interactive chat, markdown renderer & source drawer
-├── data/                            # Runtime database, PDF uploads & page preview images
-├── mock_data/                       # Sample pre-populated mock dataset & database
-├── .env                             # Environment variables configuration
-├── .gitignore                       # Git ignore configuration
-├── requirements.txt                 # Backend Python package requirements
-├── run.bat                          # One-click Windows launch script
-└── run.sh                           # One-click Unix launch script
+### Prerequisites
+- Python 3.9 or higher installed.
+
+### Step 1: Clone / Navigate to Directory
+```bash
+cd C:\Users\bijur\.gemini\antigravity\scratch\orderwise
 ```
 
----
+### Step 2: Install Dependencies
+```bash
+pip install -r requirements.txt
+```
 
-## Quick Start & Setup
+### Step 3: Configure Environment Variables (Optional)
+The project works out-of-the-box using the structured failsafe generator. Optionally, add your Gemini API Key or Hugging Face token in `.env`:
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+HF_TOKEN=your_huggingface_token_here
+PORT=8000
+HOST=127.0.0.1
+DATA_DIR=data
+DB_PATH=data/orderwise.db
+```
 
-### Option A: One-Click Launch Scripts
+### Step 4: Run the Assistant
 
-- **Windows**: Double-click `run.bat` or execute in command prompt:
-  ```cmd
-  run.bat
-  ```
+- **Option A (One-Click Script)**:
+  - **Windows**: Double-click `run.bat` or execute `run.bat` in CMD.
+  - **Linux / macOS**: Run `./run.sh`
 
-- **Linux / macOS**: Execute in shell:
+- **Option B (Manual Commands)**:
   ```bash
-  chmod +x run.sh
-  ./run.sh
+  # 1. Generate seed Kerala Finance GO PDFs
+  python backend/seed_data/generate_seed_gos.py
+
+  # 2. Start FastAPI Server
+  python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
   ```
 
-### Option B: Manual Setup
-
-1. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. **Configure Environment Variables** (Optional API keys):
-   Edit `.env` in the root folder:
-   ```env
-   GEMINI_API_KEY=your_gemini_api_key_here
-   HF_TOKEN=your_huggingface_token_here
-   PORT=8000
-   HOST=127.0.0.1
-   DATA_DIR=data
-   DB_PATH=data/orderwise.db
-   ```
-
-3. **Generate Seed Government Order PDFs**:
-   ```bash
-   python backend/seed_data/generate_seed_gos.py
-   ```
-
-4. **Launch Backend Server**:
-   ```bash
-   python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
-   ```
-
-5. **Open Web Interface**:
-   Access the web app in your browser at:
-   ```text
-   http://127.0.0.1:8000
-   ```
+### Step 5: Access Web Interface
+Open your web browser and go to:
+```text
+http://127.0.0.1:8000
+```
 
 ---
 
-## API Endpoints
+## 5. Tech Stack Used
 
-- `GET /`: Serves the frontend web interface.
-- `GET /api/documents`: Lists all ingested GO documents with active version statuses (`CURRENT`, `SUPERSEDED`, `AMENDED`).
-- `GET /api/documents/{doc_id}`: Retrieves complete document metadata, tables, and version DAG chain.
-- `GET /api/documents/{doc_id}/preview/{page}`: Serves rendered PNG preview snapshot of PDF page.
-- `POST /api/upload`: Uploads a custom PDF document and triggers the ingestion pipeline.
-- `POST /api/chat`: Processes grounded RAG query (accepts query text + optional `as_of_date`), returning formatted answer, sources, tool trace, and warnings.
-- `POST /api/as-of-date`: Evaluates document version statuses active on a target date.
+- **Language & Core Framework**: Python 3.9+, FastAPI, Uvicorn
+- **Database & Search**: SQLite 3 with FTS5 virtual table + JSON metadata storage
+- **PDF Processing**: `PyMuPDF` (`fitz`), `pdfplumber`, `reportlab` (for seed PDF generation)
+- **Vector Embeddings & NLP**: `sentence-transformers` (`all-MiniLM-L6-v2`), `rank-bm25`
+- **LLM / AI Integrations**:
+  - `google-genai` SDK (`gemini-3.6-flash` model)
+  - `openai` SDK (`https://router.huggingface.co/v1` router endpoint with `Qwen/Qwen2.5-Coder-32B-Instruct`)
+- **Frontend**: Vanilla HTML5, CSS3, JavaScript (ES6), `Marked.js` (for client-side Markdown rendering)
 
 ---
 
-## Disclaimer
+## 6. Data or Knowledge Base Used
 
-ORDERWISE is an administrative reference assistant. It does not make autonomous financial decisions. Always verify official government orders with the issuing department authority before taking administrative or financial action.
+- **Kerala Government Order (GO) Corpus**:
+  - `G.O.(Rt)No.5618/2026/FIN` (Finance (BD&GB) Department — BDS April 2026 Letter of Credit schedule table for PWD Roads, Bridges, Buildings).
+  - `G.O.(Ms)No.106/2026/FIN` (Finance (Public Undertakings-A) Department — Appointing Kerala Financial Corporation (KFC) as agent under Section 25 1(e) with enhanced limit of Rs. 100 Crore).
+  - `G.O.(Ms)No.23/2022/FIN` (Finance (Public Undertakings-A) Department — Base order appointing KFC with Rs. 50 Crore limit).
+  - `G.O.(Rt)No.4874/2026/FIN` (Finance (BD&GB) Department — BDS schedule up to March 2026).
+  - `G.O.(P)No.123/2016/FIN` (Finance Department — Base BDS guidelines).
+- **Extracted Knowledge Graph & Database**:
+  - Structured SQLite metadata database (`data/orderwise.db`) storing document abstracts, normalized dates, financial parameters, reference DAG links, and SQLite FTS5 keyword index.
+  - PDF page preview PNG snapshots stored in `data/previews/`.
+
+---
+
+## 7. Limitations (if any)
+
+1. **Scanned PDF Text Extraction**: For non-searchable scanned image PDFs without embedded text layers, an external OCR engine (such as Tesseract or Windows OCR) must be installed locally.
+2. **Kerala GO Document Pattern Assumptions**: The regex metadata parser is optimized for standard Kerala Finance Government Order formats (e.g. `G.O.(Rt)No.../FIN`, `G.O.(Ms)No.../FIN`, `Read: 1...`). Non-standard custom document formats may require custom pattern definitions.
+3. **Administrative Reference Only**: The system provides evidence-grounded answers and source page citations, but does not execute financial transactions or make autonomous government payment approvals. Official verification with the issuing department authority is required before taking administrative action.
